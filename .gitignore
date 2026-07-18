@@ -1,0 +1,52 @@
+# Entornos virtuales
+venv/
+env/
+.env
+
+# Archivos de caché de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Credenciales y llaves SSH (¡MUY IMPORTANTE NO SUBIR ESTO!)
+*.pem
+credenciales.txt
+aws_exports.sh
+
+# Archivos generados dinámicamente por tus scripts
+emr_cluster_info.json
+emr_nodes_ips.json
+
+# Logs y salidas
+*.os
+
+# Ignorar archivo de variables de entorno (claves API)
+.env
+*.out
+
+# Metadatos de Sistema Operativo
+.DS_Store
+Thumbs.db
+
+preparar_csv_50.py
+justificacion_spark_vs_hive.md
+spark_indice.py
+spark_wordcount.py
+
+*.q
+spark_taxi_queries.py
+dataset/
+consultas_hive_tpcds/
+crear_all_tablas.hql
+
+*.env
+experimento_local/
+analisis_etl_*
+
+ec2_info.json
+
+consumer_flink_chat.py
+consumer_chat.py
+levantar_emr.py
+comandos_ejecucion.txt
+
