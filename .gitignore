@@ -75,5 +75,7 @@ dependency-reduced-pom.xml
 
 ec2_flink_info.json
 ec2_taskmanager_info.json
+producer_chat*
+consumer_chat*
 
 

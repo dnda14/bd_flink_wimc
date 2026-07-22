@@ -6,9 +6,9 @@ import os
 
 REGION = 'us-east-1'
 INSTANCE_NAME = 'ec2-flink-server'
-KEY_NAME = 'vockey' # Usamos la misma llave que ya tienes
-INSTANCE_TYPE = 't3.medium' # Flink también necesita buena RAM
-AMI_ID = 'ami-0c7217cdde317cfec' # Ubuntu
+KEY_NAME = 'vockey' 
+INSTANCE_TYPE = 't3.medium' 
+AMI_ID = 'ami-0c7217cdde317cfec' 
 
 S3_BUCKET_NAME = "kafka-flink-bucket-dnda"
 
@@ -22,7 +22,6 @@ def create_security_group(ec2_client):
         )
         sg_id = response['GroupId']
 
-        # Abrir puertos: 22 (SSH), 8081 (Web UI de Flink)
         ec2_client.authorize_security_group_ingress(
             GroupId=sg_id,
             IpPermissions=[
@@ -104,6 +103,7 @@ sudo -u ubuntu /opt/flink/bin/jobmanager.sh start
         MinCount=1,
         SecurityGroupIds=[sg_id],
         UserData=user_data,
+        IamInstanceProfile={'Name': 'LabInstanceProfile'},
         TagSpecifications=[
             {
                 'ResourceType': 'instance',

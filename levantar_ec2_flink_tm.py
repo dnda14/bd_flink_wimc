@@ -5,13 +5,12 @@ import sys
 import os
 
 REGION = 'us-east-1'
-INSTANCE_NAME = 'ec2-flink-taskmanager' # Nombre distinto para el worker
+INSTANCE_NAME = 'ec2-flink-taskmanager' 
 KEY_NAME = 'vockey' 
 INSTANCE_TYPE = 't3.medium' 
 AMI_ID = 'ami-0c7217cdde317cfec' 
 
 def get_security_group_id(ec2_client, sg_name='ec2-flink-sg'):
-    # Busca el Security Group que ya creó el script del JobManager
     try:
         sgs = ec2_client.describe_security_groups(GroupNames=[sg_name])
         return sgs['SecurityGroups'][0]['GroupId']
@@ -20,7 +19,6 @@ def get_security_group_id(ec2_client, sg_name='ec2-flink-sg'):
         sys.exit(1)
 
 def lanzar_taskmanager():
-    # 1. Leer la IP privada del JobManager
     try:
         with open('ec2_flink_info.json', 'r') as f:
             jm_info = json.load(f)
@@ -37,8 +35,6 @@ def lanzar_taskmanager():
     
     print(f"Lanzando TaskManager ({INSTANCE_TYPE})... Se conectará al JobManager en {jm_private_ip}")
     
-    # 2. Configurar el User Data
-    # Inyectamos la variable jm_private_ip directamente en el YAML de Flink
     user_data = f"""#!/bin/bash
 apt-get update -y
 apt-get install -y openjdk-17-jre wget curl
@@ -79,7 +75,6 @@ chown -R ubuntu:ubuntu /opt/flink
 sudo -u ubuntu /opt/flink/bin/taskmanager.sh start
 """
 
-    # OJO: Descomenta IamInstanceProfile si estás usando S3 y necesitas permisos de AWS Academy
     response = ec2.run_instances(
         ImageId=AMI_ID,
         InstanceType=INSTANCE_TYPE,
@@ -88,7 +83,7 @@ sudo -u ubuntu /opt/flink/bin/taskmanager.sh start
         MinCount=1,
         SecurityGroupIds=[sg_id],
         UserData=user_data,
-        # IamInstanceProfile={{'Name': 'LabInstanceProfile'}}, 
+        IamInstanceProfile={'Name': 'LabInstanceProfile'},
         TagSpecifications=[
             {
                 'ResourceType': 'instance',
@@ -117,7 +112,6 @@ sudo -u ubuntu /opt/flink/bin/taskmanager.sh start
     
     info = {'instance_id': instance_id, 'ip_publica': ip_publica, 'conectado_a': jm_private_ip}
     
-    # Guardamos la info del TaskManager en su propio archivo
     with open('ec2_taskmanager_info.json', 'w') as f:
         json.dump(info, f, indent=4)
         

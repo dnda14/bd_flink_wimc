@@ -12,15 +12,22 @@ import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.java.tuple.Tuple2;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.time.LocalDateTime;
 import java.time.DayOfWeek;
 
 public class DataStreamJob {
 
-    public static class EventoEcommerce {
-        public String eventType;
-        public String productName;
-        public String userId;
+    public static class EventoCompra {
+        public String user;
+        public String event;
+        public String product;
+        public String category;
+        public String city;
+        public double price;
+        public String timestamp;
         public int hora;
         public int dia;
         public int mes;
@@ -28,81 +35,99 @@ public class DataStreamJob {
 
         @Override
         public String toString() {
-            return String.format("[%s] %s | User: %s | Día: %d Mes: %d | FinDeSemana: %b",
-                    eventType, productName, userId, dia, mes, esFinDeSemana);
+            return String.format("[%s] %s | User: %s | Cat: %s | Ciudad: %s | Precio: %.2f | Día: %d Mes: %d Hora: %d | FinDeSemana: %b",
+                    event, product, user, category, city, price, dia, mes, hora, esFinDeSemana);
         }
     }
 
 	public static void main(String[] args) throws Exception {
-		// 1. Configurar el entorno
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        
+        env.setParallelism(2);
+
 		String kafkaBroker = "IP_DE_TU_KAFKA:9092"; 
 
 		KafkaSource<String> source = KafkaSource.<String>builder()
 				.setBootstrapServers(kafkaBroker)
-				.setTopics("ventas-en-tiempo-real")
-				.setGroupId("mi-grupo-ecommerce")
+				.setTopics("eventos_topic_1")
+				.setGroupId("grupo_consumer_1")
 				.setStartingOffsets(OffsetsInitializer.latest())
 				.setValueOnlyDeserializer(new SimpleStringSchema())
 				.build();
 
 		DataStream<String> streamCrudo = env.fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source");
 
-        DataStream<EventoEcommerce> eventos = streamCrudo.map(new MapFunction<String, EventoEcommerce>() {
-            @Override
-            public EventoEcommerce map(String value) {
-                String[] partes = value.split(",");
-                EventoEcommerce e = new EventoEcommerce();
-                e.eventType = partes[0].trim().toUpperCase();
-                e.productName = partes[1].trim();
-                e.userId = partes[2].trim();
+        // =============================================
+        // 2.3 TRANSFORMACIÓN: Parsear JSON y derivar campos de fecha
+        // =============================================
+        DataStream<EventoCompra> eventos = streamCrudo.map(new MapFunction<String, EventoCompra>() {
+            private transient ObjectMapper mapper;
 
-                // Agregar atributos derivados temporales
-                LocalDateTime ahora = LocalDateTime.now();
-                e.hora = ahora.getHour();
-                e.dia = ahora.getDayOfMonth();
-                e.mes = ahora.getMonthValue();
-                e.esFinDeSemana = (ahora.getDayOfWeek() == DayOfWeek.SATURDAY || ahora.getDayOfWeek() == DayOfWeek.SUNDAY);
-                
-                return e;
+            @Override
+            public EventoCompra map(String value) {
+                if (mapper == null) {
+                    mapper = new ObjectMapper();
+                }
+
+                try {
+                    JsonNode json = mapper.readTree(value);
+
+                    EventoCompra e = new EventoCompra();
+                    e.user = json.get("user").asText();
+                    e.event = json.get("event").asText().toUpperCase();
+                    e.product = json.get("product").asText();
+                    e.category = json.get("category").asText();
+                    e.city = json.get("city").asText();
+                    e.price = json.get("price").asDouble();
+                    e.timestamp = json.get("timestamp").asText();
+
+                    LocalDateTime fecha = LocalDateTime.parse(e.timestamp);
+                    e.hora = fecha.getHour();
+                    e.dia = fecha.getDayOfMonth();
+                    e.mes = fecha.getMonthValue();
+                    e.esFinDeSemana = (fecha.getDayOfWeek() == DayOfWeek.SATURDAY || fecha.getDayOfWeek() == DayOfWeek.SUNDAY);
+
+                    return e;
+                } catch (Exception ex) {
+                    throw new RuntimeException("Error al parsear JSON: " + value, ex);
+                }
             }
         });
 
-        // ==========================================
-        // REQUISITO 1: Mostrar continuamente todos los eventos
-        // ==========================================
-        eventos.print("1. TODO");
+        // =============================================
+        // 2.1 MOSTRAR TODOS LOS EVENTOS RECIBIDOS
+        // =============================================
+        eventos.print("2.1 TODOS LOS EVENTOS");
 
-        // ==========================================
-        // 2.2 Filtrar Eventos (Solo PURCHASE y ADD_CART)
-        // ==========================================
-        DataStream<EventoEcommerce> soloComprasYCarritos = eventos.filter(e -> 
-            e.eventType.equals("PURCHASE") || e.eventType.equals("ADD_CART")
+        // =============================================
+        // 2.2 FILTRAR: Solo PURCHASE y ADD_CART
+        // =============================================
+        DataStream<EventoCompra> soloComprasYCarritos = eventos.filter(e -> 
+            e.event.equals("PURCHASE") || e.event.equals("ADD_CART")
         );
-        soloComprasYCarritos.print("2.2. FILTRO COMPRAS/CARRITO");
+        soloComprasYCarritos.print("2.2 FILTRO COMPRAS/CARRITO");
 
-        // ==========================================
-        // 2.4 Conteo de eventos generales (Búsquedas, Compras, etc.)
-        // ==========================================
+        // =============================================
+        // 2.4 CONTEO DE EVENTOS (Estadísticas Globales)
+        // Número de búsquedas, compras, visualizaciones, agregados al carrito
+        // =============================================
         DataStream<Tuple2<String, Integer>> conteoEventos = eventos
-            .map(e -> new Tuple2<>(e.eventType, 1))
+            .map(e -> new Tuple2<>(e.event, 1))
             .returns(Types.TUPLE(Types.STRING, Types.INT))
-            .keyBy(t -> t.f0) // Agrupar por el tipo de evento
-            .sum(1);          // Sumar el contador
-        conteoEventos.print("2.4. ESTADÍSTICAS GLOBALES");
+            .keyBy(t -> t.f0) 
+            .sum(1);          
+        conteoEventos.print("2.4 ESTADÍSTICAS GLOBALES");
 
-        // ==========================================
-        // 2.5 Agrupamiento por producto (Mayor actividad visualizaciones)
-        // ==========================================
+        // =============================================
+        // 2.5 AGRUPAMIENTO POR PRODUCTO (Mayor actividad)
+        // =============================================
         DataStream<Tuple2<String, Integer>> rankingProductos = eventos
-            .filter(e -> e.eventType.equals("VIEW_PRODUCT")) // Solo tomar visualizaciones
-            .map(e -> new Tuple2<>(e.productName, 1))
+            .map(e -> new Tuple2<>(e.product, 1))
             .returns(Types.TUPLE(Types.STRING, Types.INT))
-            .keyBy(t -> t.f0) // Agrupar por el nombre del producto
-            .sum(1);          // Sumar las visualizaciones
-        rankingProductos.print("2.5. RANKING VISUALIZACIONES");
+            .keyBy(t -> t.f0) 
+            .sum(1);          
+        rankingProductos.print("2.5 RANKING PRODUCTOS");
 
-		// Ejecutar la topología
 		env.execute("Proyecto Ecommerce Flink");
 	}
 }
