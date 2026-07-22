@@ -1,48 +1,97 @@
-# Proyecto Kafka Chat (EC2 y KRaft)
+# Lab de Ventas en Tiempo Real (Kafka + Flink)
 
-Este proyecto implementa una arquitectura de mensajeria en tiempo real utilizando Apache Kafka desplegado en una instancia de Amazon EC2. El sistema simula salas de chat mediante el uso de productores y consumidores programados en Python, demostrando conceptos clave como particiones, consumer groups y ruteo por llaves.
+Este laboratorio implementa una arquitectura distribuida de Big Data para el procesamiento en tiempo real de eventos de e-commerce. Utiliza **Apache Kafka** como bus de mensajería y **Apache Flink** como motor de procesamiento en streaming (procesamiento de datos continuos).
 
-## Requisitos Previos
+Todo el despliegue está automatizado usando scripts en Python y **Boto3** para levantar infraestructura en **Amazon EC2**.
 
-- Cuenta de AWS y llave SSH (archivo .pem) para acceder a la instancia EC2.
-- Python 3.10+ en el entorno local.
-- Libreria confluent-kafka para Python.
+---
 
-Para instalar las dependencias locales, ejecute:
-pip install confluent-kafka
+##  Arquitectura de la Solución
 
-## Arquitectura de la Solucion
+El flujo de los datos sigue esta estructura:
 
-1. Broker de Kafka (EC2): Servidor Ubuntu que ejecuta Kafka en modo KRaft (sin ZooKeeper).
-2. Productor (producer_chat.py / producer_chat2.py): Scripts que generan mensajes de diferentes usuarios asignados a salas especificas. Utilizan el nombre de la sala como "key" para garantizar el orden de entrega.
-3. Consumidor (consumer_chat.py / consumer_chat2.py): Scripts que se suscriben al topic y procesan los mensajes en tiempo real utilizando el grupo de consumidores "grupo-notifi".
+1. **Simulador / Productor de Ventas (`producer_venta.py`)**:
+   Genera eventos JSON aleatorios simulando acciones de usuarios en una tienda online (`VIEW_PRODUCT`, `ADD_CART`, `PURCHASE`, `SEARCH`).
+   Los eventos se envían al topic `eventos_topic_1` utilizando el ID del usuario (`user`) como **Partition Key**, lo que garantiza el balanceo de carga y el orden cronológico.
 
-## Despliegue de la Infraestructura
+2. **Broker de Kafka (Servidor EC2)**:
+   Almacena los eventos JSON. El topic está configurado con **2 particiones** para habilitar la lectura en paralelo.
 
-El proyecto incluye el script levantar_ec2.py que automatiza la creacion y configuracion del servidor Kafka mediante la libreria Boto3. 
+3. **Apache Flink (Cluster en EC2)**:
+   - **1 JobManager**: Coordinador central.
+   - **2 TaskManagers**: Nodos trabajadores. Cada uno consume una partición distinta en paralelo (gracias al paralelismo = 2).
+   El Job en Java (`DataStreamJob.java`) procesa, filtra, transforma y agrupa las estadísticas de forma continua.
 
-El script realiza lo siguiente:
-- Crea un Security Group con los puertos 22 (SSH) y 9092 (Kafka) abiertos.
-- Lanza una instancia t3.medium.
-- Instala Java 17 y descarga Apache Kafka.
-- Configura Kafka en modo KRaft, asignando la IP publica al archivo server.properties.
-- Crea un servicio Systemd para mantener Kafka en ejecucion continua.
+---
 
-Para desplegar la infraestructura:
-python3 levantar_ec2.py
+##  Requisitos Previos
 
-## Uso de la Aplicacion
+- **Credenciales AWS**: Configuración local (ej. `aws_exports.sh` y llave `.pem`) para Boto3.
+- **Python 3+**: Instalar librerías `boto3` y `kafka-python`.
+- **Maven**: Para compilar el proyecto de Java Flink.
 
-### 1. Productores
-Para enviar mensajes al topic configurado, ejecute uno o varios productores en terminales distintas:
-python3 producer_chat.py
-python3 producer_chat2.py
+---
 
-### 2. Consumidores
-Para recibir los mensajes, inicie uno o multiples consumidores en terminales paralelas:
-python3 consumer_chat.py
-python3 consumer_chat2.py
+##  Guía Rápida de Despliegue y Ejecución
 
-Nota: Si inicia multiples consumidores con el mismo "group.id", Kafka balanceara automaticamente la carga repartiendo las particiones disponibles entre ellos.
+### 1. Despliegue de Infraestructura Flink (EC2)
+*Asegúrate de que tu servidor Kafka ya esté corriendo.*
 
+Levanta el nodo principal (Coordinador):
+```bash
+python3 levantar_ec2_flink_jm.py
+```
+*(Espera un par de minutos a que la instancia se instale y anota la IP Pública para acceder a la UI en el puerto 8081)*.
 
+Levanta los nodos de trabajo (Ejecutar este comando **2 veces** para tener 2 servidores):
+```bash
+python3 levantar_ec2_flink_tm.py
+```
+
+### 2. Configurar Kafka
+En tu servidor Kafka, crea el topic con 2 particiones:
+```bash
+kafka-topics.sh --create --topic eventos_topic_1 --bootstrap-server localhost:9092 --partitions 2 --replication-factor 1
+```
+
+### 3. Compilar el Job de Flink
+Navega a la carpeta del proyecto Java y compílalo:
+```bash
+cd flink-ventas
+mvn clean package -DskipTests
+```
+Se generará un archivo JAR: `target/flink-ventas-1.0-SNAPSHOT.jar`.
+
+### 4. Desplegar el Job en Flink
+1. Abre el Panel Web de Flink: `http://[IP_JOBMANAGER]:8081`.
+2. Ve a **Submit New Job**.
+3. Sube el `.jar` generado y presiona **Submit**.
+
+### 5. Iniciar la Simulación de Ventas
+Ejecuta el script productor en tu computadora local:
+```bash
+python3 producer_venta.py
+```
+
+En la UI de Flink (TaskManagers > Stdout), empezarás a ver en tiempo real:
+- `2.1`: Listado de todos los eventos.
+- `2.2`: Filtro exclusivo de Compras y Carritos.
+- `2.4`: Conteo y estadísticas globales acumuladas por acción.
+- `2.5`: Ranking de productos más interactuados.
+
+---
+
+##  Estructura del Evento JSON
+
+```json
+{
+  "user": "USR042",
+  "event": "PURCHASE",
+  "product": "Laptop Lenovo",
+  "category": "Electronics",
+  "city": "Arequipa",
+  "price": 3200.0,
+  "timestamp": "2026-07-20T19:15:20"
+}
+```
+*(El job de Flink lee este JSON y lo enriquece automáticamente agregando la `hora`, el `día`, el `mes` y la validación de `esFinDeSemana`).*
