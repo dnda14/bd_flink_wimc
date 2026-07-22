@@ -49,18 +49,18 @@ def lanzar_ec2():
     
     user_data = """#!/bin/bash
 apt-get update -y
-apt-get install -y openjdk-17-jre wget
+apt-get install -y openjdk-11-jre wget
 
 # 1. Obtener la IP Pública y Privada
 TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
 PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
 PRIVATE_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4)
 
-# 2. Descargar e instalar Apache Flink 2.x
+# 2. Descargar e instalar Apache Flink 1.20.5
 cd /opt
-wget https://archive.apache.org/dist/flink/flink-2.3.0/flink-2.3.0-bin-scala_2.12.tgz
-tar -xzf flink-2.3.0-bin-scala_2.12.tgz
-mv flink-2.3.0 flink
+wget https://downloads.apache.org/flink/flink-1.20.5/flink-1.20.5-bin-scala_2.12.tgz
+tar -xzf flink-1.20.5-bin-scala_2.12.tgz
+mv flink-1.20.5 flink
 
 mkdir -p /opt/flink/plugins/s3-fs-hadoop
 cp /opt/flink/opt/flink-s3-fs-hadoop-*.jar /opt/flink/plugins/s3-fs-hadoop/

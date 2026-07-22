@@ -37,13 +37,13 @@ def lanzar_taskmanager():
     
     user_data = f"""#!/bin/bash
 apt-get update -y
-apt-get install -y openjdk-17-jre wget curl
+apt-get install -y openjdk-11-jre wget curl
 
-# Descargar e instalar Apache Flink 2.3.0
+# Descargar e instalar Apache Flink 1.20.5
 cd /opt
-wget https://archive.apache.org/dist/flink/flink-2.3.0/flink-2.3.0-bin-scala_2.12.tgz
-tar -xzf flink-2.3.0-bin-scala_2.12.tgz
-mv flink-2.3.0 flink
+wget https://downloads.apache.org/flink/flink-1.20.5/flink-1.20.5-bin-scala_2.12.tgz
+tar -xzf flink-1.20.5-bin-scala_2.12.tgz
+mv flink-1.20.5 flink
 
 # Habilitar plugin de S3 (Obligatorio para los checkpoints de RocksDB)
 mkdir -p /opt/flink/plugins/s3-fs-hadoop

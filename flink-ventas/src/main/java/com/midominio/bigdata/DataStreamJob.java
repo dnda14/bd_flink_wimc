@@ -44,8 +44,10 @@ public class DataStreamJob {
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         
         env.setParallelism(2);
+        
+        // env.enableCheckpointing(10000);
 
-		String kafkaBroker = "IP_DE_TU_KAFKA:9092"; 
+		String kafkaBroker = "52.90.48.174:9092"; 
 
 		KafkaSource<String> source = KafkaSource.<String>builder()
 				.setBootstrapServers(kafkaBroker)
@@ -57,9 +59,6 @@ public class DataStreamJob {
 
 		DataStream<String> streamCrudo = env.fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source");
 
-        // =============================================
-        // 2.3 TRANSFORMACIÓN: Parsear JSON y derivar campos de fecha
-        // =============================================
         DataStream<EventoCompra> eventos = streamCrudo.map(new MapFunction<String, EventoCompra>() {
             private transient ObjectMapper mapper;
 
@@ -94,39 +93,26 @@ public class DataStreamJob {
             }
         });
 
-        // =============================================
-        // 2.1 MOSTRAR TODOS LOS EVENTOS RECIBIDOS
-        // =============================================
-        eventos.print("2.1 TODOS LOS EVENTOS");
+        eventos.print("EVENTOS");
 
-        // =============================================
-        // 2.2 FILTRAR: Solo PURCHASE y ADD_CART
-        // =============================================
         DataStream<EventoCompra> soloComprasYCarritos = eventos.filter(e -> 
             e.event.equals("PURCHASE") || e.event.equals("ADD_CART")
         );
-        soloComprasYCarritos.print("2.2 FILTRO COMPRAS/CARRITO");
+        soloComprasYCarritos.print(" FILTRO COMPRAS/CARRITO");
 
-        // =============================================
-        // 2.4 CONTEO DE EVENTOS (Estadísticas Globales)
-        // Número de búsquedas, compras, visualizaciones, agregados al carrito
-        // =============================================
         DataStream<Tuple2<String, Integer>> conteoEventos = eventos
             .map(e -> new Tuple2<>(e.event, 1))
             .returns(Types.TUPLE(Types.STRING, Types.INT))
             .keyBy(t -> t.f0) 
             .sum(1);          
-        conteoEventos.print("2.4 ESTADÍSTICAS GLOBALES");
+        conteoEventos.print(" ESTADÍSTICAS ");
 
-        // =============================================
-        // 2.5 AGRUPAMIENTO POR PRODUCTO (Mayor actividad)
-        // =============================================
         DataStream<Tuple2<String, Integer>> rankingProductos = eventos
             .map(e -> new Tuple2<>(e.product, 1))
             .returns(Types.TUPLE(Types.STRING, Types.INT))
             .keyBy(t -> t.f0) 
             .sum(1);          
-        rankingProductos.print("2.5 RANKING PRODUCTOS");
+        rankingProductos.print(" RANKING ");
 
 		env.execute("Proyecto Ecommerce Flink");
 	}

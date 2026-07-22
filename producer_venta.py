@@ -4,29 +4,29 @@ import time
 from datetime import datetime, timedelta
 from kafka import KafkaProducer
 
-KAFKA_BROKER = "IP_DE_TU_KAFKA:9092"
+KAFKA_BROKER = "52.90.48.174:9092"
 TOPIC = "eventos_topic_1"
 
 EVENTOS = ["VIEW_PRODUCT", "ADD_CART", "PURCHASE", "SEARCH"]
 
 PRODUCTOS = {
     "Electronics": [
-        ("Laptop Lenovo", 3200),
-        ("Laptop Dell", 4500),
-        ("iPhone 15", 5200),
-        ("Samsung Galaxy S24", 3800),
-        ("Audífonos Sony", 450),
-        ("Monitor LG 27\"", 1200),
+        ("Laptop HP", 3200),
+        ("Laptop LEnovo", 4500),
+        ("Redmi 11", 5200),
+        ("Smartphone Galaxy", 3800),
+        ("Audífonos Phillips", 450),
+        ("Monitor Black 27\"", 1200),
     ],
     "Hogar": [
-        ("Aspiradora Robot", 1800),
+        ("Waflera Robot", 1800),
         ("Licuadora Oster", 350),
-        ("Cafetera Nespresso", 900),
+        ("Arrocera Oster", 900),
     ],
     "Ropa": [
-        ("Zapatillas Nike", 650),
-        ("Polo Adidas", 180),
-        ("Casaca North Face", 1200),
+        ("Zapatillas Mike", 650),
+        ("Polo Delfin", 180),
+        ("Polera Univefsal", 1200),
     ],
 }
 
