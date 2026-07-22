@@ -50,3 +50,30 @@ consumer_chat.py
 levantar_emr.py
 comandos_ejecucion.txt
 
+
+# ----------------------------------
+# Entorno Java y Maven (Proyecto Flink)
+# ----------------------------------
+# Ignorar la carpeta de compilación de Maven
+**/target/
+target/
+
+# Archivos temporales de Maven
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+dependency-reduced-pom.xml
+
+# Ignorar configuraciones locales de IDEs (VSCode, IntelliJ, Eclipse)
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+
+ec2_flink_info.json
+ec2_taskmanager_info.json
+
+

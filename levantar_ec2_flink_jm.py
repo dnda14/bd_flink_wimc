@@ -10,6 +10,8 @@ KEY_NAME = 'vockey' # Usamos la misma llave que ya tienes
 INSTANCE_TYPE = 't3.medium' # Flink también necesita buena RAM
 AMI_ID = 'ami-0c7217cdde317cfec' # Ubuntu
 
+S3_BUCKET_NAME = "kafka-flink-bucket-dnda"
+
 def create_security_group(ec2_client):
     sg_name = 'ec2-flink-sg'
     try:
@@ -27,6 +29,7 @@ def create_security_group(ec2_client):
                 {'IpProtocol': 'tcp', 'FromPort': 22, 'ToPort': 22, 'IpRanges': [{'CidrIp': '0.0.0.0/0'}]},
                 {'IpProtocol': 'tcp', 'FromPort': 8081, 'ToPort': 8081, 'IpRanges': [{'CidrIp': '0.0.0.0/0'}]},
                 {'IpProtocol': 'tcp', 'FromPort': 6123, 'ToPort': 6123, 'IpRanges': [{'CidrIp': '0.0.0.0/0'}]}, # Flink RPC
+                {'IpProtocol': 'tcp', 'FromPort': 0, 'ToPort': 65535, 'UserIdGroupPairs': [{'GroupId': sg_id}]}
             ]
         )
 
@@ -49,25 +52,48 @@ def lanzar_ec2():
 apt-get update -y
 apt-get install -y openjdk-17-jre wget
 
-# 1. Obtener la IP Pública
+# 1. Obtener la IP Pública y Privada
 TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
 PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
+PRIVATE_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4)
 
-# 2. Descargar e instalar Apache Flink 1.18.1
+# 2. Descargar e instalar Apache Flink 2.x
 cd /opt
-wget https://archive.apache.org/dist/flink/flink-1.18.1/flink-1.18.1-bin-scala_2.12.tgz
-tar -xzf flink-1.18.1-bin-scala_2.12.tgz
-mv flink-1.18.1 flink
+wget https://archive.apache.org/dist/flink/flink-2.3.0/flink-2.3.0-bin-scala_2.12.tgz
+tar -xzf flink-2.3.0-bin-scala_2.12.tgz
+mv flink-2.3.0 flink
+
+mkdir -p /opt/flink/plugins/s3-fs-hadoop
+cp /opt/flink/opt/flink-s3-fs-hadoop-*.jar /opt/flink/plugins/s3-fs-hadoop/
 
 # 3. Configurar Flink para permitir acceso web desde afuera
-echo "rest.address: 0.0.0.0" >> /opt/flink/conf/flink-conf.yaml
-echo "rest.bind-address: 0.0.0.0" >> /opt/flink/conf/flink-conf.yaml
+cat <<EOF > /opt/flink/conf/config.yaml
+rest:
+  address: $PUBLIC_IP
+  bind-address: 0.0.0.0
+
+jobmanager:
+  rpc:
+    address: $PRIVATE_IP
+    port: 6123
+  memory:
+    process.size: 1600m
+
+taskmanager:
+  memory:
+    process.size: 1728m
+
+state:
+  backend: rocksdb
+  checkpoints:
+    dir: s3://kafka-flink-bucket-dnda/flink-checkpoints
+EOF
 
 # 4. Dar permisos al usuario ubuntu
 chown -R ubuntu:ubuntu /opt/flink
 
 # 5. Iniciar el cluster de Flink localmente
-sudo -u ubuntu /opt/flink/bin/start-cluster.sh
+sudo -u ubuntu /opt/flink/bin/jobmanager.sh start
 """
 
     response = ec2.run_instances(
@@ -94,6 +120,7 @@ sudo -u ubuntu /opt/flink/bin/start-cluster.sh
     
     desc = ec2.describe_instances(InstanceIds=[instance_id])
     ip_publica = desc['Reservations'][0]['Instances'][0].get('PublicIpAddress', 'No asignada')
+    ip_privada = desc['Reservations'][0]['Instances'][0].get('PrivateIpAddress', 'No asignada')
     
     print("\n" + "=" * 60)
     print("RESUMEN DE LA INSTANCIA EC2 DE FLINK")
@@ -106,7 +133,7 @@ sudo -u ubuntu /opt/flink/bin/start-cluster.sh
     print("=" * 60)
     print("Nota: Espera unos 2-3 minutos para que se instale todo antes de abrir el Panel Web.")
     
-    info = {'instance_id': instance_id, 'ip_publica': ip_publica}
+    info = {'instance_id': instance_id, 'ip_publica': ip_publica, 'ip_privada_jm': ip_privada}
     with open('ec2_flink_info.json', 'w') as f:
         json.dump(info, f, indent=4)
         
