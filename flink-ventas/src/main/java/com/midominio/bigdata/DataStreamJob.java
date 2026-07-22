@@ -11,7 +11,12 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.java.tuple.Tuple2;
-
+import org.apache.flink.connector.file.sink.FileSink;
+import org.apache.flink.core.fs.Path;
+import org.apache.flink.api.common.serialization.SimpleStringEncoder;
+import org.apache.flink.streaming.api.functions.sink.filesystem.rollingpolicies.DefaultRollingPolicy;
+import java.time.Duration;
+import org.apache.flink.configuration.MemorySize;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -45,7 +50,8 @@ public class DataStreamJob {
         
         env.setParallelism(2);
         
-        // env.enableCheckpointing(10000);
+        env.enableCheckpointing(10000);
+        env.getCheckpointConfig().setCheckpointStorage("s3://flink-datalake-dnda-2026/checkpoints");
 
 		String kafkaBroker = "52.90.48.174:9092"; 
 
@@ -94,11 +100,33 @@ public class DataStreamJob {
         });
 
         eventos.print("EVENTOS");
+        
+        FileSink<String> sinkEventos = FileSink
+            .forRowFormat(new Path("s3://flink-datalake-dnda-2026/eventos_crudos"), new SimpleStringEncoder<String>("UTF-8"))
+            .withRollingPolicy(
+                DefaultRollingPolicy.builder()
+                    .withRolloverInterval(Duration.ofMinutes(2))
+                    .withInactivityInterval(Duration.ofMinutes(1))
+                    .withMaxPartSize(MemorySize.ofMebiBytes(10))
+                    .build())
+            .build();
+        eventos.map(e -> e.toString()).sinkTo(sinkEventos).name("S3 Sink Eventos");
 
         DataStream<EventoCompra> soloComprasYCarritos = eventos.filter(e -> 
             e.event.equals("PURCHASE") || e.event.equals("ADD_CART")
         );
         soloComprasYCarritos.print(" FILTRO COMPRAS/CARRITO");
+
+        FileSink<String> sinkCompras = FileSink
+            .forRowFormat(new Path("s3://flink-datalake-dnda-2026/compras_carritos"), new SimpleStringEncoder<String>("UTF-8"))
+            .withRollingPolicy(
+                DefaultRollingPolicy.builder()
+                    .withRolloverInterval(Duration.ofMinutes(2))
+                    .withInactivityInterval(Duration.ofMinutes(1))
+                    .withMaxPartSize(MemorySize.ofMebiBytes(10))
+                    .build())
+            .build();
+        soloComprasYCarritos.map(e -> e.toString()).sinkTo(sinkCompras).name("S3 Sink Compras");
 
         DataStream<Tuple2<String, Integer>> conteoEventos = eventos
             .map(e -> new Tuple2<>(e.event, 1))
